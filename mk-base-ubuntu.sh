@@ -86,10 +86,28 @@ cat <<EOF | sudo chroot $TARGET_ROOTFS_DIR/
 export DEBIAN_FRONTEND=noninteractive
 export APT_INSTALL="apt-get install -fy --allow-downgrades"
 
+# pre-installed software
+
 export LC_ALL=C.UTF-8
+
+# Create a fake systemctl command to avoid errors during package installation
+# This is needed because some postinst scripts try to call systemctl but it's not available in chroot
+if [ ! -f /bin/systemctl ]; then
+    cat > /bin/systemctl << 'FAKE_SYSTEMCTL'
+#!/bin/sh
+# Fake systemctl for chroot environment
+echo "systemctl is not available in chroot environment"
+echo "Command: $@"
+exit 0
+FAKE_SYSTEMCTL
+    chmod +x /bin/systemctl
+fi
 
 apt-get -y update
 apt-get -f -y upgrade
+
+# Install systemd tools and basic system utilities
+\${APT_INSTALL} systemd systemd-sysv util-linux sysvinit-utils
 
 if [ "$TARGET" == "gnome" ]; then
     apt install -y ubuntu-desktop-minimal rsyslog sudo dialog apt-utils ntp evtest onboard
@@ -126,7 +144,7 @@ fi
 \${APT_INSTALL} net-tools openssh-server ifupdown alsa-utils ntp network-manager gdb inetutils-ping libssl-dev \
     vsftpd tcpdump can-utils i2c-tools strace vim iperf3 ethtool netplan.io toilet htop pciutils usbutils curl \
     whiptail gnupg bc xinput gdisk parted gcc sox libsox-fmt-all gpiod libgpiod-dev python3-pip python3-libgpiod \
-    guvcview
+    guvcview git tree wpasupplicant lsof
 
 \${APT_INSTALL} ttf-wqy-zenhei xfonts-intl-chinese
 
@@ -159,7 +177,6 @@ if [[ "$TARGET" == "gnome-full" ||  "$TARGET" == "xfce-full" ]]; then
 
     \${APT_INSTALL} $(check-language-support)
 fi
-
 
 if [[ "$TARGET" == "gnome" || "$TARGET" == "gnome-full" ]]; then
     \${APT_INSTALL} mpv acpid gnome-sound-recorder
@@ -223,6 +240,9 @@ sed -i -e '
 /\%sudo/ c \
 %sudo    ALL=(ALL) NOPASSWD: ALL
 ' /etc/sudoers
+
+# Remove the fake systemctl
+rm -f /bin/systemctl
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*

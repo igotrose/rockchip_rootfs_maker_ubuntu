@@ -237,7 +237,6 @@ elif [[ "$TARGET" == "xfce" || "$TARGET" == "xfce-full" ]]; then
 elif [ "$TARGET" == "lite" ]; then
     \${APT_INSTALL} bluez bluez-tools
 fi
-
 \${APT_INSTALL} /packages/install_packages/*.deb
 
 \${APT_INSTALL} /boot/kerneldeb/* || true

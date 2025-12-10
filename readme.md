@@ -22,13 +22,13 @@ sudo apt-get install -f
 - gnome-full：桌面版，使用gnome桌面套件+更多推荐软件包
 
 #### step1.构建基础 Ubuntu 系统。
-
+如果没有修改 `mk-base-ubuntu.sh` 脚本中的内容，则不需要重复构建base镜像部分。如果修改了则需要重新构建基础根文件系统
 ```
 # 运行以下脚本，根据提示选择要构建的版本
-sudo ./mk-base-ubuntu.sh
+./mk-base-ubuntu.sh
 ```
 #### step2.添加 rk overlay 层,并打包ubuntu-rootfs镜像
-
+如果修改了`mk-ubuntu-rootfs.sh、overlay、overlay-debug、overlay-firmware、packages`的内容，则需要执行以下命令
 ```
 # 运行以下脚本，根据提示选择要构建处理器版本和ubuntu的版本
 ./mk-ubuntu-rootfs.sh
