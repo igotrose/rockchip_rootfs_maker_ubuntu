@@ -29,36 +29,51 @@ function mnt() {
     else
         echo "/dev/pts already mounted"
     fi
+    
+    # Check if /run is already mounted
+    if ! mountpoint -q ${2}/run; then
+        sudo mount -o bind /run ${2}/run
+    else
+        echo "/run already mounted"
+    fi
 }
 
 function umnt() {
     echo "UNMOUNTING"
+    
+    # Check if /run is mounted before unmounting (unmount first as it's mounted last)
+    if mountpoint -q ${2}/run; then
+        sudo umount -f ${2}/run 2>/dev/null || sudo umount ${2}/run
+    else
+        echo "/run not mounted"
+    fi
+    
     # Check if /dev/pts is mounted before unmounting
     if mountpoint -q ${2}/dev/pts; then
-        sudo umount ${2}/dev/pts
+        sudo umount -f ${2}/dev/pts 2>/dev/null || sudo umount ${2}/dev/pts
     else
         echo "/dev/pts not mounted"
     fi
     
-    # Check if /proc is mounted before unmounting
-    if mountpoint -q ${2}/proc; then
-        sudo umount ${2}/proc
+    # Check if /dev is mounted before unmounting
+    if mountpoint -q ${2}/dev; then
+        sudo umount -f ${2}/dev 2>/dev/null || sudo umount ${2}/dev
     else
-        echo "/proc not mounted"
+        echo "/dev not mounted"
     fi
     
     # Check if /sys is mounted before unmounting
     if mountpoint -q ${2}/sys; then
-        sudo umount ${2}/sys
+        sudo umount -f ${2}/sys 2>/dev/null || sudo umount ${2}/sys
     else
         echo "/sys not mounted"
     fi
     
-    # Check if /dev is mounted before unmounting
-    if mountpoint -q ${2}/dev; then
-        sudo umount ${2}/dev
+    # Check if /proc is mounted before unmounting (unmount last as it's mounted first)
+    if mountpoint -q ${2}/proc; then
+        sudo umount -f ${2}/proc 2>/dev/null || sudo umount ${2}/proc
     else
-        echo "/dev not mounted"
+        echo "/proc not mounted"
     fi
 }
 

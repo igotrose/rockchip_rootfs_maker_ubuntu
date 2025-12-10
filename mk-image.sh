@@ -21,7 +21,7 @@ fi
 
 sudo ./add-build-info.sh ${TARGET_ROOTFS_DIR}
 
-EXTRA_SIZE_MB=200
+EXTRA_SIZE_MB=300
 IMAGE_SIZE_MB=$(( $(sudo du -sh -m ${TARGET_ROOTFS_DIR} | cut -f1) + ${EXTRA_SIZE_MB} ))
 
 sudo mkfs.ext4 -d ${TARGET_ROOTFS_DIR} ${ROOTFSIMAGE} ${IMAGE_SIZE_MB}M

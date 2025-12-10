@@ -5,7 +5,7 @@ TARGET_ROOTFS_DIR="binary"
 
 if [ ! $SOC ]; then
     echo "---------------------------------------------------------"
-    echo "please enter soc number:"
+    echo "Please enter soc number:"
     echo "Please enter the number of the CPU to build:"
     echo "[0] Exit Menu"
     echo "[1] rk3128"
@@ -88,7 +88,6 @@ install_packages() {
         rk3328|rk3528)
         MALI=utgard-450
         ISP=rkisp
-        MIRROR=carp-rk352x
         ;;
         rk3128|rk3036)
         MALI=utgard-400
@@ -97,17 +96,14 @@ install_packages() {
         rk3562)
         MALI=bifrost-g52-g13p0
         ISP=rkaiq_rk3562
-        # MIRROR=carp-rk356x
         ;;
         rk356x|rk3566|rk3568)
         MALI=bifrost-g52-g13p0
         ISP=rkaiq_rk3568
-        # MIRROR=carp-rk356x
         ;;
         rk3588|rk3588s)
         ISP=rkaiq_rk3588
         MALI=valhall-g610-g13p0
-        # MIRROR=carp-rk3588
         ;;
     esac
 }
@@ -202,6 +198,24 @@ done
 
 export LC_ALL=C.UTF-8
 
+# Create a fake systemctl command to avoid errors during package installation
+# This is needed because some postinst scripts try to call systemctl but it's not available in chroot
+if [ ! -f /bin/systemctl ]; then
+    cat > /bin/systemctl << 'FAKE_SYSTEMCTL'
+#!/bin/sh
+# Fake systemctl for chroot environment
+echo "systemctl is not available in chroot environment"
+echo "Command: $@"
+exit 0
+FAKE_SYSTEMCTL
+    chmod +x /bin/systemctl
+fi
+
+
+# Make sure the APT directory exists.
+mkdir -p /var/cache/apt/archives/partial
+mkdir -p /var/lib/apt/lists/partial
+
 apt-get update
 apt-get upgrade -y
 
@@ -211,7 +225,8 @@ chmod +x /etc/rc.local
 export DEBIAN_FRONTEND=noninteractive
 export APT_INSTALL="apt-get install -fy --allow-downgrades"
 
-apt purge initramfs-tools -y
+# Safely remove initramfs-tools (if it exists)
+dpkg -l | grep -q initramfs-tools && apt purge initramfs-tools -y || echo "initramfs-tools not installed, skipping removal"
 
 \${APT_INSTALL} u-boot-tools edid-decode logrotate
 if [[ "$TARGET" == "gnome" || "$TARGET" == "gnome-full" ]]; then
@@ -271,8 +286,6 @@ fi
 if [[ "$TARGET" == "gnome" ||  "$TARGET" == "xfce" || "$TARGET" == "gnome-full" || "$TARGET" == "xfce-full" ]]; then
     echo -e "\033[47;36m ------ update chromium ----- \033[0m"
     \${APT_INSTALL} /packages/chromium/*.deb
-    # echo -e "\033[47;36m --------- firefox-esr ------ \033[0m"
-    # \${APT_INSTALL} /packages/firefox/*.deb
 fi
 
 echo -e "\033[47;36m ------- Install libdrm ------ \033[0m"
@@ -301,7 +314,6 @@ echo -e "\033[47;36m ----- Install rktoolkit ----- \033[0m"
 if [[ "$TARGET" == "gnome" ||  "$TARGET" == "xfce" || "$TARGET" == "gnome-full" || "$TARGET" == "xfce-full" ]]; then
     echo -e "\033[47;36m ------ Install ffmpeg ------- \033[0m"
     \${APT_INSTALL} ffmpeg
-    # \${APT_INSTALL} /packages/ffmpeg/*.deb
 fi
 
 if [[ "$TARGET" == "gnome" ||  "$TARGET" == "xfce" || "$TARGET" == "gnome-full" || "$TARGET" == "xfce-full" ]]; then
@@ -320,34 +332,45 @@ systemctl mask NetworkManager-wait-online.service
 systemctl disable hostapd
 rm /lib/systemd/system/wpa_supplicant@.service
 
+# Remove the fake systemctl
+rm -f /bin/systemctl
+
 echo -e "\033[47;36m  ---------- Clean ----------- \033[0m"
-if [ -e "/usr/lib/arm-linux-gnueabihf/dri" ] ;
-then
+# Ensure that the necessary directories exist
+mkdir -p /var/cache/apt/archives/partial
+mkdir -p /var/lib/apt/lists/partial
+
+# A safer cleaning method
+if [ -d /var/lib/apt/lists ]; then
+    find /var/lib/apt/lists/* -not -name "lock" -not -name "partial" -delete 2>/dev/null || true
+fi
+
+if [ -d /var/cache ]; then
+    find /var/cache/* -not -name "ldconfig" -not -name "ldconfig/*" -not -name "apt" -not -name "apt/*" -delete 2>/dev/null || true
+fi
+
+# Clean up the "packages" and "boot" directories
+rm -rf /packages/
+find /boot/* -not -name "build-host" -delete 2>/dev/null || true
+
+if [ -e "/usr/lib/arm-linux-gnueabihf/dri" ] ; then
         # Only preload libdrm-cursor for X
         sed -i "1aexport LD_PRELOAD=/usr/lib/arm-linux-gnueabihf/libdrm-cursor.so.1" /usr/bin/X
         cd /usr/lib/arm-linux-gnueabihf/dri/
         cp kms_swrast_dri.so swrast_dri.so rockchip_dri.so /
         rm /usr/lib/arm-linux-gnueabihf/dri/*.so
         mv /*.so /usr/lib/arm-linux-gnueabihf/dri/
-elif [ -e "/usr/lib/aarch64-linux-gnu/dri" ];
-then
+elif [ -e "/usr/lib/aarch64-linux-gnu/dri" ]; then
         # Only preload libdrm-cursor for X
         sed -i "1aexport LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libdrm-cursor.so.1" /usr/bin/X
         cd /usr/lib/aarch64-linux-gnu/dri/
         cp kms_swrast_dri.so swrast_dri.so rockchip_dri.so /
         rm /usr/lib/aarch64-linux-gnu/dri/*.so
         mv /*.so /usr/lib/aarch64-linux-gnu/dri/
-        rm /etc/profile.d/qt.sh
 fi
-
-rm -rf /home/$(whoami)
-rm -rf /var/lib/apt/lists/*
-rm -rf /var/cache/
-rm -rf /packages/
-rm -rf /boot/*
 
 EOF
 
 ./ch-mount.sh -u $TARGET_ROOTFS_DIR
 
-source ./mk-image.sh 
+source ./mk-image.sh
