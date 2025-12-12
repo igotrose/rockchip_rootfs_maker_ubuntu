@@ -90,19 +90,6 @@ export APT_INSTALL="apt-get install -fy --allow-downgrades"
 
 export LC_ALL=C.UTF-8
 
-# Create a fake systemctl command to avoid errors during package installation
-# This is needed because some postinst scripts try to call systemctl but it's not available in chroot
-if [ ! -f /bin/systemctl ]; then
-    cat > /bin/systemctl << 'FAKE_SYSTEMCTL'
-#!/bin/sh
-# Fake systemctl for chroot environment
-echo "systemctl is not available in chroot environment"
-echo "Command: $@"
-exit 0
-FAKE_SYSTEMCTL
-    chmod +x /bin/systemctl
-fi
-
 apt-get -y update
 apt-get -f -y upgrade
 
@@ -240,9 +227,6 @@ sed -i -e '
 /\%sudo/ c \
 %sudo    ALL=(ALL) NOPASSWD: ALL
 ' /etc/sudoers
-
-# Remove the fake systemctl
-rm -f /bin/systemctl
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*

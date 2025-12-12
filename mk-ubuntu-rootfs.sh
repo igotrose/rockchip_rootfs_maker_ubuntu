@@ -198,20 +198,6 @@ done
 
 export LC_ALL=C.UTF-8
 
-# Create a fake systemctl command to avoid errors during package installation
-# This is needed because some postinst scripts try to call systemctl but it's not available in chroot
-if [ ! -f /bin/systemctl ]; then
-    cat > /bin/systemctl << 'FAKE_SYSTEMCTL'
-#!/bin/sh
-# Fake systemctl for chroot environment
-echo "systemctl is not available in chroot environment"
-echo "Command: $@"
-exit 0
-FAKE_SYSTEMCTL
-    chmod +x /bin/systemctl
-fi
-
-
 # Make sure the APT directory exists.
 mkdir -p /var/cache/apt/archives/partial
 mkdir -p /var/lib/apt/lists/partial
@@ -224,6 +210,23 @@ chmod +x /etc/rc.local
 
 export DEBIAN_FRONTEND=noninteractive
 export APT_INSTALL="apt-get install -fy --allow-downgrades"
+
+# Install systemd tools and basic system utilities
+\${APT_INSTALL} systemd systemd-sysv util-linux sysvinit-utils
+
+# Enable Rockchip specific services
+systemctl enable usbdevice
+systemctl enable automount
+systemctl enable resize-all
+systemctl enable ssh
+systemctl enable rockchip
+systemctl enable async
+
+# Ensure systemd is properly configured
+systemctl set-default multi-user.target
+systemctl enable systemd-networkd
+systemctl enable systemd-resolved
+systemctl enable quectel
 
 # Safely remove initramfs-tools (if it exists)
 dpkg -l | grep -q initramfs-tools && apt purge initramfs-tools -y || echo "initramfs-tools not installed, skipping removal"
@@ -276,6 +279,8 @@ if [[ "$TARGET" == "gnome" || "$TARGET" == "gnome-full" ]]; then
     echo -e "\033[47;36m ----- Install Xserver------- \033[0m"
     \${APT_INSTALL} /packages/xserver/xserver-xorg-*.deb
     apt-mark hold xserver-xorg-core xserver-xorg-legacy
+    echo -e "\033[47;36m ----- Install Display Manager and Session Manager ----- \033[0m"
+    \${APT_INSTALL} gdm3 gnome-session
 elif [[ "$TARGET" == "xfce" || "$TARGET" == "xfce-full" ]]; then
     echo -e "\033[47;36m ----- Install Xserver------- \033[0m"
     \${APT_INSTALL} /packages/xserver/*.deb
@@ -330,9 +335,6 @@ systemctl mask systemd-networkd-wait-online.service
 systemctl mask NetworkManager-wait-online.service
 systemctl disable hostapd
 rm /lib/systemd/system/wpa_supplicant@.service
-
-# Remove the fake systemctl
-rm -f /bin/systemctl
 
 echo -e "\033[47;36m  ---------- Clean ----------- \033[0m"
 # Ensure that the necessary directories exist
