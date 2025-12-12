@@ -287,9 +287,27 @@ elif [[ "$TARGET" == "xfce" || "$TARGET" == "xfce-full" ]]; then
     apt-mark hold xserver-common xserver-xorg-core xserver-xorg-legacy
 fi
 
+if [[ "$TARGET" == "gnome" || "$TARGET" == "gnome-full" ]]; then
+    # Enable GNOME Display Manager
+    systemctl enable gdm3
+    
+    # Enable additional desktop services
+    systemctl enable accounts-daemon || echo "accounts-daemon not available"
+    systemctl enable bluetooth || echo "bluetooth not available"
+    systemctl enable cups || echo "cups not available"
+    
+    # Enable graphical target as default
+    systemctl set-default graphical.target
+fi
+
 if [[ "$TARGET" == "gnome" ||  "$TARGET" == "xfce" || "$TARGET" == "gnome-full" || "$TARGET" == "xfce-full" ]]; then
     echo -e "\033[47;36m ------ update chromium ----- \033[0m"
     \${APT_INSTALL} /packages/chromium/*.deb
+fi
+
+if [[ "$TARGET" == "gnome" || "$TARGET" == "gnome-full" || "$TARGET" == "xfce" || "$TARGET" == "xfce-full" ]]; then
+    echo -e "\033[47;36m ----- Install USB Host Support ----- \033[0m"
+    \${APT_INSTALL} udisks2 gvfs gvfs-fuse gvfs-backends
 fi
 
 echo -e "\033[47;36m ------- Install libdrm ------ \033[0m"
