@@ -129,7 +129,7 @@ elif [ "$TARGET" == "xfce-full" ]; then
 fi
 
 \${APT_INSTALL} net-tools openssh-server ifupdown alsa-utils ntp network-manager gdb inetutils-ping libssl-dev \
-    vsftpd tcpdump can-utils i2c-tools strace vim iperf3 ethtool netplan.io toilet htop pciutils usbutils curl \
+    vsftpd tcpdump can-utils i2c-tools strace vim iperf3 ethtool netplan.io htop pciutils usbutils curl \
     whiptail gnupg bc xinput gdisk parted gcc sox libsox-fmt-all gpiod libgpiod-dev python3-pip python3-libgpiod \
     guvcview git tree wpasupplicant lsof
 
@@ -188,7 +188,7 @@ echo "root:linaro" | chpasswd
 sed -i '/pam_securetty.so/s/^/# /g' /etc/pam.d/login
 
 # hostname
-echo linaro > /etc/hostname
+echo CoreSmart > /etc/hostname
 
 # set localtime
 ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
