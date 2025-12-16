@@ -4,9 +4,10 @@ After=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/quectel
+ExecStart=/usr/bin/quectel start
 RemainAfterExit=yes
 TimeoutSec=60
+User=root
 
 [Install]
 WantedBy=multi-user.target

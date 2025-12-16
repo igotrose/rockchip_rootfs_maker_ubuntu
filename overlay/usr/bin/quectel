@@ -13,6 +13,7 @@
 DEVICE="/dev/ttyUSB2"
 BAUDRATE=115200
 TIMEOUT=30
+QUECTEL_CM="/usr/share/quectel/quectel-CM"
 
 log() {
     echo "$(date): $1" >> /var/log/quectel-setup.log
@@ -22,17 +23,21 @@ wait_for_device() {
     log "Waiting for device $DEVICE to be ready..."
     local counter=0
 
-    while [ ! -c "$DEVICE"] && [ $counter -lt $TIMEOUT ]; do
+    while [ ! -c "$DEVICE" ] && [ $counter -lt $TIMEOUT ]; do
         sleep 1
         counter=$((counter+1))
     done
 
     if [ ! -c "$DEVICE" ]; then
-        log "ERROR: Device $DEVICE not found after ${TINMEOUT} seconds}"
+        log "ERROR: Device $DEVICE not found after ${TIMEOUT} seconds"
         return 1
     fi
 
-    log "Device $DEVICE not ready"
+    if [ ! -w "$DEVICE" ] && [ ! -r "$DEVICE" ]; then
+        log "WARNING: No read/write permission for $DEVICE"
+    fi
+
+    log "Device $DEVICE is ready"
     return 0
 }
 
@@ -62,9 +67,21 @@ setup_module() {
     log "Quectel module setup completed"
 }
 
+start_quectel_cm() {
+    log "Starting quectel-CM..."
+
+    if [ ! -f $QUECTEL_CM ]; then 
+        log "ERROR: quectek-CM is not executable"
+        return 1
+    fi 
+
+    $QUECTEL_CM &
+    log "quectel-CM start with PID $!"
+}
+
 case "$1" in
     start)
-        wait_for_device || setup_module
+        wait_for_device && setup_module && start_quectel_cm
         ;;
     stop)
         log "Quectel module setup script stopped"
