@@ -53,7 +53,7 @@ sudo rm -rf $TARGET_ROOTFS_DIR/
 if [ ! -d $TARGET_ROOTFS_DIR ] ; then
     sudo mkdir -p $TARGET_ROOTFS_DIR
 
-    UBUNTU_BASE_FILE="../ubuntu-base-20.04.1-base-arm64.tar.gz"
+    UBUNTU_BASE_FILE="./ubuntu-base-22.04.5-base-arm64.tar.gz"
     if [ ! -e $UBUNTU_BASE_FILE ]; then
         echo -e "\033[47;36m Error: $UBUNTU_BASE_FILE not found! \033[0m"
         exit 1
@@ -175,7 +175,7 @@ fi
 
 pip3 install python-periphery Adafruit-Blinka -i https://mirrors.aliyun.com/pypi/simple/
 
-HOST=ubuntu-2020.04
+HOST=ubuntu-22.04.5
 
 # Create user
 useradd -G sudo -m -s /bin/bash linaro
