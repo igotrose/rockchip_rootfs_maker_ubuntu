@@ -1,9 +1,10 @@
-#!/bin/bash -e
+#!/bin/bash
+set -Eeuo pipefail
 
 # Directory contains the target rootfs
 TARGET_ROOTFS_DIR="binary"
 
-if [ ! $SOC ]; then
+if [ -z "${SOC:-}" ]; then
     echo "---------------------------------------------------------"
     echo "Please enter soc number:"
     echo "Please enter the number of the CPU to build:"
@@ -41,7 +42,7 @@ if [ ! $SOC ]; then
     echo -e "\033[47;36m set SOC=$SOC...... \033[0m"
 fi
 
-if [ ! $TARGET ]; then
+if [ -z "${TARGET:-}" ]; then
     echo "---------------------------------------------------------"
     echo "Please enter TARGET version number:"
     echo "Please enter the version of the root file system to be built:"
@@ -119,7 +120,7 @@ esac
 
 echo -e "\033[47;36m Building for $ARCH \033[0m"
 
-if [ ! $VERSION ]; then
+if [ -z "${VERSION:-}" ]; then
     VERSION="release"
 fi
 
@@ -130,11 +131,17 @@ if [ ! -e ubuntu-base-"$TARGET"-$ARCH-*.tar.gz ]; then
     exit -1
 fi
 
-finish() {
-    sudo umount $TARGET_ROOTFS_DIR/dev
-    exit -1
+cleanup() {
+    set +e
+    ./ch-mount.sh -u "$TARGET_ROOTFS_DIR" >/dev/null 2>&1 || true
 }
-trap finish ERR
+on_error() {
+    local code=$?
+    cleanup
+    exit "$code"
+}
+trap cleanup INT TERM EXIT
+trap on_error ERR
 
 echo -e "\033[47;36m Extract image \033[0m"
 sudo rm -rf $TARGET_ROOTFS_DIR
@@ -182,11 +189,12 @@ elif [ "$ARCH" == "arm64"  ]; then
     sudo cp /usr/bin/qemu-aarch64-static $TARGET_ROOTFS_DIR/usr/bin/
 fi
 
-./ch-mount.sh -m $TARGET_ROOTFS_DIR
+./ch-mount.sh -u "$TARGET_ROOTFS_DIR" >/dev/null 2>&1 || true
+./ch-mount.sh -m "$TARGET_ROOTFS_DIR"
 
 ID=$(stat --format %u $TARGET_ROOTFS_DIR)
 
-cat << EOF | sudo chroot $TARGET_ROOTFS_DIR
+cat << EOF | sudo chroot "$TARGET_ROOTFS_DIR"
 
 # Fixup owners
 if [ "$ID" -ne 0 ]; then
@@ -394,6 +402,7 @@ fi
 
 EOF
 
-./ch-mount.sh -u $TARGET_ROOTFS_DIR
+./ch-mount.sh -u "$TARGET_ROOTFS_DIR"
+trap - INT TERM EXIT ERR
 
 source ./mk-image.sh

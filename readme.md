@@ -11,6 +11,8 @@ for rockchip platform.
 sudo apt-get install binfmt-support qemu-user-static
 sudo dpkg -i ubuntu-build-service/packages/*
 sudo apt-get install -f
+sudo update-binfmts --enable qemu-aarch64
+sudo update-binfmts --enable qemu-arm
 ```
 
 ## 构建 Ubuntu20.04镜像（仅支持64bit）

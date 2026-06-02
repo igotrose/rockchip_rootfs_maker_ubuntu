@@ -1,6 +1,7 @@
-#!/bin/bash -e
+#!/bin/bash
+set -Eeuo pipefail
 
-if [ ! $TARGET ]; then
+if [ -z "${TARGET:-}" ]; then
 	echo "---------------------------------------------------------"
 	echo "Please enter TARGET version number:"
 	echo "[0] Exit Menu"
@@ -37,9 +38,9 @@ if [ ! $TARGET ]; then
     echo -e "\033[47;36m set TARGET=$TARGET...... \033[0m"
 fi
 
-if [ "$ARCH" == "armhf" ]; then
+if [ "${ARCH:-}" == "armhf" ]; then
 	ARCH='armhf'
-elif [ "$ARCH" == "arm64" ]; then
+elif [ "${ARCH:-}" == "arm64" ]; then
 	ARCH='arm64'
 else
     ARCH="arm64"
@@ -70,18 +71,24 @@ if [ ! -d $TARGET_ROOTFS_DIR ] ; then
     fi
 fi
 
-finish() {
-    ./ch-mount.sh -u $TARGET_ROOTFS_DIR
-    echo -e "error exit"
-    exit -1
+cleanup() {
+    set +e
+    ./ch-mount.sh -u "$TARGET_ROOTFS_DIR" >/dev/null 2>&1 || true
 }
-trap finish ERR
+on_error() {
+    local code=$?
+    cleanup
+    exit "$code"
+}
+trap cleanup INT TERM EXIT
+trap on_error ERR
 
 echo -e "\033[47;36m Change root.................... \033[0m"
 
-./ch-mount.sh -m $TARGET_ROOTFS_DIR
+./ch-mount.sh -u "$TARGET_ROOTFS_DIR" >/dev/null 2>&1 || true
+./ch-mount.sh -m "$TARGET_ROOTFS_DIR"
 
-cat <<EOF | sudo chroot $TARGET_ROOTFS_DIR/
+sudo chroot "$TARGET_ROOTFS_DIR" /bin/bash <<'EOF'
 
 export DEBIAN_FRONTEND=noninteractive
 export APT_INSTALL="apt-get install -fy --allow-downgrades"
@@ -188,7 +195,7 @@ echo "root:linaro" | chpasswd
 sed -i '/pam_securetty.so/s/^/# /g' /etc/pam.d/login
 
 # hostname
-echo CoreSmart > /etc/hostname
+echo Rockchip > /etc/hostname
 
 # set localtime
 ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
@@ -235,7 +242,8 @@ sync
 
 EOF
 
-./ch-mount.sh -u $TARGET_ROOTFS_DIR
+./ch-mount.sh -u "$TARGET_ROOTFS_DIR"
+trap - INT TERM EXIT ERR
 
 if mount | grep -q "$TARGET_ROOTFS_DIR"; then
     echo -e "\033[47;31m WARNING: Some mount points still active, forcing unmount...\033[0m"
