@@ -213,6 +213,7 @@ export APT_INSTALL="apt-get install -fy --allow-downgrades"
 
 # Install systemd tools and basic system utilities
 \${APT_INSTALL} systemd systemd-sysv util-linux sysvinit-utils
+\${APT_INSTALL} android-tools-adbd
 
 # Enable Rockchip specific services
 systemctl enable usbdevice
@@ -227,6 +228,9 @@ systemctl set-default multi-user.target
 systemctl enable systemd-networkd
 systemctl enable systemd-resolved
 systemctl enable quectel
+
+mkdir -p /etc/init.d
+echo usb_adb_en > /etc/init.d/.usb_config
 
 # Safely remove initramfs-tools (if it exists)
 dpkg -l | grep -q initramfs-tools && apt purge initramfs-tools -y || echo "initramfs-tools not installed, skipping removal"
