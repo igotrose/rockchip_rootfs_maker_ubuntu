@@ -86,16 +86,23 @@ trap on_error ERR
 echo -e "\033[47;36m Change root.................... \033[0m"
 
 ./ch-mount.sh -u "$TARGET_ROOTFS_DIR" >/dev/null 2>&1 || true
+sudo rm -f "$TARGET_ROOTFS_DIR/etc/resolv.conf"
+sudo cp -Lf /etc/resolv.conf "$TARGET_ROOTFS_DIR/etc/resolv.conf"
 ./ch-mount.sh -m "$TARGET_ROOTFS_DIR"
 
 sudo chroot "$TARGET_ROOTFS_DIR" /bin/bash <<'EOF'
 
 export DEBIAN_FRONTEND=noninteractive
-export APT_INSTALL="apt-get install -fy --allow-downgrades"
+export APT_INSTALL="apt-get install -fy --allow-downgrades -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
 
 # pre-installed software
 
 export LC_ALL=C.UTF-8
+
+# Ensure DNS works inside chroot
+mkdir -p /etc
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
 apt-get -y update
 apt-get -f -y upgrade
@@ -103,39 +110,32 @@ apt-get -f -y upgrade
 # Install systemd tools and basic system utilities
 \${APT_INSTALL} systemd systemd-sysv util-linux sysvinit-utils
 
+# Install basic network tools first
+${APT_INSTALL} iproute2 net-tools inetutils-ping ifupdown network-manager openssh-server curl wget dnsutils wireless-tools wpasupplicant
+
+apt-get update
+
 if [ "$TARGET" == "gnome" ]; then
-    apt install -y ubuntu-desktop-minimal rsyslog sudo dialog apt-utils ntp evtest onboard
-    mv /var/lib/dpkg/info/ /var/lib/dpkg/info_old/
-    mkdir /var/lib/dpkg/info/
-    apt-get update
-    apt install -y ubuntu-desktop-minimal rsyslog sudo dialog apt-utils ntp evtest onboard
-    mv /var/lib/dpkg/info_old/* /var/lib/dpkg/info/
+    ${APT_INSTALL} ubuntu-desktop-minimal gdm3 rsyslog sudo dialog apt-utils ntp evtest onboard
+    dpkg -l | grep -q ubuntu-desktop-minimal || { echo "ubuntu-desktop-minimal install failed"; exit 1; }
+    dpkg -l | grep -q gdm3 || { echo "gdm3 install failed"; exit 1; }
 elif [ "$TARGET" == "xfce" ]; then
-    apt install -y xubuntu-core onboard rsyslog sudo dialog apt-utils ntp evtest udev
-    mv /var/lib/dpkg/info/ /var/lib/dpkg/info_old/
-    mkdir /var/lib/dpkg/info/
-    apt-get update
-    apt install -y xubuntu-core onboard rsyslog sudo dialog apt-utils ntp evtest udev
-    mv /var/lib/dpkg/info_old/* /var/lib/dpkg/info/
+    ${APT_INSTALL} xubuntu-core lightdm onboard rsyslog sudo dialog apt-utils ntp evtest udev
+    dpkg -l | grep -q xubuntu-core || { echo "xubuntu-core install failed"; exit 1; }
+    dpkg -l | grep -q lightdm || { echo "lightdm install failed"; exit 1; }
 elif [ "$TARGET" == "lite" ]; then
-    apt install -y rsyslog sudo dialog apt-utils ntp evtest acpid
+    ${APT_INSTALL} rsyslog sudo dialog apt-utils ntp evtest acpid
 elif [ "$TARGET" == "gnome-full" ]; then
-    apt install -y ubuntu-desktop-minimal rsyslog sudo dialog apt-utils ntp evtest onboard
-    mv /var/lib/dpkg/info/ /var/lib/dpkg/info_old/
-    mkdir /var/lib/dpkg/info/
-    apt-get update
-    apt install -y ubuntu-desktop-minimal rsyslog sudo dialog apt-utils ntp evtest onboard
-    mv /var/lib/dpkg/info_old/* /var/lib/dpkg/info/
+    ${APT_INSTALL} ubuntu-desktop gdm3 rsyslog sudo dialog apt-utils ntp evtest onboard
+    dpkg -l | grep -q ubuntu-desktop || { echo "ubuntu-desktop install failed"; exit 1; }
+    dpkg -l | grep -q gdm3 || { echo "gdm3 install failed"; exit 1; }
 elif [ "$TARGET" == "xfce-full" ]; then
-    apt install -y xubuntu-desktop onboard rsyslog sudo dialog apt-utils ntp evtest udev
-    mv /var/lib/dpkg/info/ /var/lib/dpkg/info_old/
-    mkdir /var/lib/dpkg/info/
-    apt-get update
-    apt install -y xubuntu-desktop onboard rsyslog sudo dialog apt-utils ntp evtest udev
-    mv /var/lib/dpkg/info_old/* /var/lib/dpkg/info/
+    ${APT_INSTALL} xubuntu-desktop lightdm onboard rsyslog sudo dialog apt-utils ntp evtest udev
+    dpkg -l | grep -q xubuntu-desktop || { echo "xubuntu-desktop install failed"; exit 1; }
+    dpkg -l | grep -q lightdm || { echo "lightdm install failed"; exit 1; }
 fi
 
-\${APT_INSTALL} net-tools openssh-server ifupdown alsa-utils ntp network-manager gdb inetutils-ping libssl-dev \
+${APT_INSTALL} alsa-utils ntp gdb libssl-dev \
     vsftpd tcpdump can-utils i2c-tools strace vim iperf3 ethtool netplan.io htop pciutils usbutils curl \
     whiptail gnupg bc xinput gdisk parted gcc sox libsox-fmt-all gpiod libgpiod-dev python3-pip python3-libgpiod \
     guvcview git tree wpasupplicant lsof
@@ -205,6 +205,10 @@ services=(NetworkManager systemd-networkd)
 for service in ${services[@]}; do
   systemctl mask ${service}-wait-online.service
 done
+
+if [[ "$TARGET" == "gnome" || "$TARGET" == "gnome-full" || "$TARGET" == "xfce" || "$TARGET" == "xfce-full" ]]; then
+  systemctl set-default graphical.target
+fi
 
 # disbale the wire/nl80211
 systemctl mask wpa_supplicant-wired@

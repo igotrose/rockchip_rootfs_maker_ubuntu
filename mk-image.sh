@@ -2,7 +2,7 @@
 
 TARGET_ROOTFS_DIR=./binary
 
-if [ $RK_ROOTFS_IMAGE ]; then
+if [ -n "${RK_ROOTFS_IMAGE:-}" ]; then
 	ROOTFSIMAGE=$RK_ROOTFS_IMAGE
 else
 	ROOTFSIMAGE=ubuntu-$TARGET-rootfs.img

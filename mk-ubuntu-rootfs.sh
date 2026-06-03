@@ -109,7 +109,7 @@ install_packages() {
     esac
 }
 
-case "${ARCH:-$1}" in
+case "${ARCH:-${1:-}}" in
     arm|arm32|armhf)
         ARCH=armhf
         ;;
@@ -150,7 +150,9 @@ sudo tar -xpf ubuntu-base-$TARGET-$ARCH-*.tar.gz
 # packages folder
 sudo mkdir -p $TARGET_ROOTFS_DIR/packages
 sudo cp -rpf packages/$ARCH/* $TARGET_ROOTFS_DIR/packages
-sudo cp -rpfv packages/soc/$SOC/* $TARGET_ROOTFS_DIR/packages || true
+if [ -d "packages/soc/$SOC" ]; then
+    sudo cp -rpfv packages/soc/$SOC/* "$TARGET_ROOTFS_DIR/packages"
+fi
 
 #GPU/CAMERA packages folder
 install_packages
@@ -190,11 +192,13 @@ elif [ "$ARCH" == "arm64"  ]; then
 fi
 
 ./ch-mount.sh -u "$TARGET_ROOTFS_DIR" >/dev/null 2>&1 || true
+sudo rm -f "$TARGET_ROOTFS_DIR/etc/resolv.conf"
+sudo cp -Lf /etc/resolv.conf "$TARGET_ROOTFS_DIR/etc/resolv.conf"
 ./ch-mount.sh -m "$TARGET_ROOTFS_DIR"
 
 ID=$(stat --format %u $TARGET_ROOTFS_DIR)
 
-cat << EOF | sudo chroot "$TARGET_ROOTFS_DIR"
+cat > "$TARGET_ROOTFS_DIR/tmp/mk-ubuntu-rootfs-chroot.sh" <<EOF
 
 # Fixup owners
 if [ "$ID" -ne 0 ]; then
@@ -205,6 +209,11 @@ for u in \$(ls /home/); do
 done
 
 export LC_ALL=C.UTF-8
+
+# Ensure DNS works inside chroot
+mkdir -p /etc
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
 # Make sure the APT directory exists.
 mkdir -p /var/cache/apt/archives/partial
@@ -217,7 +226,7 @@ chmod o+x /usr/lib/dbus-1.0/dbus-daemon-launch-helper
 chmod +x /etc/rc.local
 
 export DEBIAN_FRONTEND=noninteractive
-export APT_INSTALL="apt-get install -fy --allow-downgrades"
+export APT_INSTALL="apt-get install -fy --allow-downgrades -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
 
 # Install systemd tools and basic system utilities
 \${APT_INSTALL} systemd systemd-sysv util-linux sysvinit-utils
@@ -312,6 +321,12 @@ if [[ "$TARGET" == "gnome" || "$TARGET" == "gnome-full" ]]; then
     systemctl set-default graphical.target
 fi
 
+if [[ "$TARGET" == "xfce" || "$TARGET" == "xfce-full" ]]; then
+    # Enable LightDM for XFCE desktop
+    systemctl enable lightdm || echo "lightdm not available"
+    systemctl set-default graphical.target
+fi
+
 if [[ "$TARGET" == "gnome" ||  "$TARGET" == "xfce" || "$TARGET" == "gnome-full" || "$TARGET" == "xfce-full" ]]; then
     echo -e "\033[47;36m ------ update chromium ----- \033[0m"
     \${APT_INSTALL} /packages/chromium/*.deb
@@ -363,8 +378,8 @@ apt list --upgradable | cut -d/ -f1 | xargs apt-mark hold
 echo -e "\033[47;36m ------- Custom Script ------- \033[0m"
 systemctl mask systemd-networkd-wait-online.service
 systemctl mask NetworkManager-wait-online.service
-systemctl disable hostapd
-rm /lib/systemd/system/wpa_supplicant@.service
+systemctl disable hostapd 2>/dev/null || true
+rm -f /lib/systemd/system/wpa_supplicant@.service
 
 echo -e "\033[47;36m  ---------- Clean ----------- \033[0m"
 # Ensure that the necessary directories exist
@@ -402,6 +417,9 @@ fi
 
 EOF
 
+sudo chmod +x "$TARGET_ROOTFS_DIR/tmp/mk-ubuntu-rootfs-chroot.sh"
+sudo chroot "$TARGET_ROOTFS_DIR" /bin/bash /tmp/mk-ubuntu-rootfs-chroot.sh
+sudo rm -f "$TARGET_ROOTFS_DIR/tmp/mk-ubuntu-rootfs-chroot.sh"
 ./ch-mount.sh -u "$TARGET_ROOTFS_DIR"
 trap - INT TERM EXIT ERR
 
