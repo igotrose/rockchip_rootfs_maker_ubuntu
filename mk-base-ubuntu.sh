@@ -90,7 +90,7 @@ sudo rm -f "$TARGET_ROOTFS_DIR/etc/resolv.conf"
 sudo cp -Lf /etc/resolv.conf "$TARGET_ROOTFS_DIR/etc/resolv.conf"
 ./ch-mount.sh -m "$TARGET_ROOTFS_DIR"
 
-sudo chroot "$TARGET_ROOTFS_DIR" /bin/bash <<'EOF'
+sudo chroot "$TARGET_ROOTFS_DIR" /usr/bin/env TARGET="$TARGET" ARCH="$ARCH" /bin/bash <<'EOF'
 
 export DEBIAN_FRONTEND=noninteractive
 export APT_INSTALL="apt-get install -fy --allow-downgrades -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
@@ -108,7 +108,7 @@ apt-get -y update
 apt-get -f -y upgrade
 
 # Install systemd tools and basic system utilities
-\${APT_INSTALL} systemd systemd-sysv util-linux sysvinit-utils
+${APT_INSTALL} systemd systemd-sysv util-linux sysvinit-utils
 
 # Install basic network tools first
 ${APT_INSTALL} iproute2 net-tools inetutils-ping ifupdown network-manager openssh-server curl wget dnsutils wireless-tools wpasupplicant
@@ -140,19 +140,19 @@ ${APT_INSTALL} alsa-utils ntp gdb libssl-dev \
     whiptail gnupg bc xinput gdisk parted gcc sox libsox-fmt-all gpiod libgpiod-dev python3-pip python3-libgpiod \
     guvcview git tree wpasupplicant lsof
 
-\${APT_INSTALL} ttf-wqy-zenhei xfonts-intl-chinese
+${APT_INSTALL} ttf-wqy-zenhei xfonts-intl-chinese
 
 if [[ "$TARGET" == "gnome-full" ||  "$TARGET" == "xfce-full" ]]; then
     apt purge ibus firefox -y
 
     echo -e "\033[47;36m Install English fonts.................... \033[0m"
-    \${APT_INSTALL} language-pack-en-base gnome-user-docs-en language-pack-gnome-en
+    ${APT_INSTALL} language-pack-en-base gnome-user-docs-en language-pack-gnome-en
 
     # set default xinput for fcitx
-    \${APT_INSTALL} fcitx fcitx-table fcitx-googlepinyin fcitx-pinyin fcitx-config-gtk
+    ${APT_INSTALL} fcitx fcitx-table fcitx-googlepinyin fcitx-pinyin fcitx-config-gtk
     sed -i 's/default/fcitx/g' /etc/X11/xinit/xinputrc
 
-    \${APT_INSTALL} ipython3 jupyter
+    ${APT_INSTALL} ipython3 jupyter
 
     ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
     timedatectl set-timezone Asia/Shanghai
@@ -169,15 +169,15 @@ if [[ "$TARGET" == "gnome-full" ||  "$TARGET" == "xfce-full" ]]; then
     echo "LANG=en_US.UTF-8" >> /etc/environment
     echo "LANGUAGE=en_US:en" >> /etc/environment
 
-    \${APT_INSTALL} $(check-language-support)
+    ${APT_INSTALL} $(check-language-support)
 fi
 
 if [[ "$TARGET" == "gnome" || "$TARGET" == "gnome-full" ]]; then
-    \${APT_INSTALL} mpv acpid gnome-sound-recorder
+    ${APT_INSTALL} mpv acpid gnome-sound-recorder
 elif [[ "$TARGET" == "xfce" || "$TARGET" == "xfce-full" ]]; then
-    \${APT_INSTALL} mpv acpid gnome-sound-recorder
+    ${APT_INSTALL} mpv acpid gnome-sound-recorder
 elif [ "$TARGET" == "lite" ]; then
-    \${APT_INSTALL}  
+    ${APT_INSTALL}  
 fi
 
 pip3 install python-periphery Adafruit-Blinka -i https://mirrors.aliyun.com/pypi/simple/

@@ -388,16 +388,16 @@ mkdir -p /var/lib/apt/lists/partial
 
 # A safer cleaning method
 if [ -d /var/lib/apt/lists ]; then
-    find /var/lib/apt/lists/* -not -name "lock" -not -name "partial" -delete 2>/dev/null || true
+    find /var/lib/apt/lists/* -mindepth 1 -not -name "lock" -not -name "partial" -delete 2>/dev/null || true
 fi
 
 if [ -d /var/cache ]; then
-    find /var/cache/* -not -name "ldconfig" -not -name "ldconfig/*" -not -name "apt" -not -name "apt/*" -delete 2>/dev/null || true
+    find /var/cache/* -mindepth 1 -not -name "ldconfig" -not -name "ldconfig/*" -not -name "apt" -not -name "apt/*" -delete 2>/dev/null || true
 fi
 
 # Clean up the "packages" and "boot" directories
 rm -rf /packages/
-find /boot/* -not -name "build-host" -delete 2>/dev/null || true
+find /boot/* -mindepth 1 -not -name "build-host" -delete 2>/dev/null || true
 
 if [ -e "/usr/lib/arm-linux-gnueabihf/dri" ] ; then
         # Only preload libdrm-cursor for X
