@@ -138,7 +138,14 @@ fi
 ${APT_INSTALL} alsa-utils ntp gdb libssl-dev \
     vsftpd tcpdump can-utils i2c-tools strace vim iperf3 ethtool netplan.io htop pciutils usbutils curl \
     whiptail gnupg bc xinput gdisk parted gcc sox libsox-fmt-all gpiod libgpiod-dev python3-pip python3-libgpiod \
-    guvcview git tree wpasupplicant lsof
+    guvcview git tree wpasupplicant lsof lsb-release
+
+${APT_INSTALL} lsb-core || true
+
+# Common board-side compatibility deps for DKMS modules, Python helpers and
+# vendor binaries that still link against legacy ncurses/tinfo ABI.
+${APT_INSTALL} dkms build-essential kmod pkg-config python3 python-is-python3 python3-dev python3-venv \
+    python3-setuptools python3-wheel libncurses5 libtinfo5 libatomic1
 
 ${APT_INSTALL} ttf-wqy-zenhei xfonts-intl-chinese
 
@@ -196,6 +203,14 @@ sed -i '/pam_securetty.so/s/^/# /g' /etc/pam.d/login
 
 # hostname
 echo Rockchip > /etc/hostname
+cat > /etc/hosts <<'HOSTS_EOF'
+127.0.0.1 localhost
+127.0.1.1 Rockchip
+
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+HOSTS_EOF
 
 # set localtime
 ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime

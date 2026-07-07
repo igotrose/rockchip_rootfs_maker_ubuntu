@@ -1,6 +1,10 @@
 #!/bin/bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SDK_TOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+KERNEL_DEB_DIR="$SDK_TOP_DIR/output/bsp-debs"
+
 # Directory contains the target rootfs
 TARGET_ROOTFS_DIR="binary"
 
@@ -126,10 +130,18 @@ fi
 
 echo -e "\033[47;36m Building for $VERSION \033[0m"
 
-if [ ! -e ubuntu-base-"$TARGET"-$ARCH-*.tar.gz ]; then
+shopt -s nullglob
+BASE_ROOTFS_FILES=(ubuntu-base-"$TARGET"-$ARCH-*.tar.gz)
+shopt -u nullglob
+
+if [ "${#BASE_ROOTFS_FILES[@]}" -eq 0 ]; then
     echo "\033[41;36m Run mk-base-ubuntu.sh first \033[0m"
     exit -1
 fi
+
+mapfile -t BASE_ROOTFS_FILES < <(printf '%s\n' "${BASE_ROOTFS_FILES[@]}" | sort -V)
+BASE_ROOTFS="${BASE_ROOTFS_FILES[-1]}"
+echo -e "\033[47;36m Using base rootfs: $BASE_ROOTFS \033[0m"
 
 cleanup() {
     set +e
@@ -144,8 +156,18 @@ trap cleanup INT TERM EXIT
 trap on_error ERR
 
 echo -e "\033[47;36m Extract image \033[0m"
-sudo rm -rf $TARGET_ROOTFS_DIR
-sudo tar -xpf ubuntu-base-$TARGET-$ARCH-*.tar.gz
+EXTRACT_ROOT="${TARGET_ROOTFS_DIR}.extract.$$"
+sudo rm -rf "$EXTRACT_ROOT"
+sudo mkdir -p "$EXTRACT_ROOT"
+sudo tar -xpf "$BASE_ROOTFS" -C "$EXTRACT_ROOT"
+if [ ! -d "$EXTRACT_ROOT/$TARGET_ROOTFS_DIR" ]; then
+    echo "ERROR: $BASE_ROOTFS does not contain $TARGET_ROOTFS_DIR/"
+    sudo rm -rf "$EXTRACT_ROOT"
+    exit 1
+fi
+sudo rm -rf "$TARGET_ROOTFS_DIR"
+sudo mv "$EXTRACT_ROOT/$TARGET_ROOTFS_DIR" "$TARGET_ROOTFS_DIR"
+sudo rm -rf "$EXTRACT_ROOT"
 
 # packages folder
 sudo mkdir -p $TARGET_ROOTFS_DIR/packages
@@ -160,13 +182,39 @@ sudo mkdir -p $TARGET_ROOTFS_DIR/packages/install_packages
 sudo cp -rpf packages/$ARCH/libmali/libmali-*$MALI*-x11*.deb $TARGET_ROOTFS_DIR/packages/install_packages
 sudo cp -rpf packages/$ARCH/${ISP:0:5}/camera_engine_$ISP*.deb $TARGET_ROOTFS_DIR/packages/install_packages
 
-#linux kernel deb
-if [ -e ../linux-headers* ]; then
-    Image_Deb=$(basename ../linux-headers*)
-    sudo mkdir -p $TARGET_ROOTFS_DIR/boot/kerneldeb
-    sudo touch $TARGET_ROOTFS_DIR/boot/build-host
-    sudo cp -vrpf ../${Image_Deb} $TARGET_ROOTFS_DIR/boot/kerneldeb
-    sudo cp -vrpf ../${Image_Deb/headers/image} $TARGET_ROOTFS_DIR/boot/kerneldeb
+# linux kernel debs
+KERNEL_INSTALL_DEBS=()
+shopt -s nullglob
+for pkg in ../linux-image-*.deb ../linux-headers-*.deb; do
+    case "$pkg" in
+        *-dbg_*.deb) continue ;;
+    esac
+    KERNEL_INSTALL_DEBS+=("$pkg")
+done
+if [ -d "$KERNEL_DEB_DIR" ]; then
+    for pkg in "$KERNEL_DEB_DIR"/linux-image-*.deb "$KERNEL_DEB_DIR"/linux-headers-*.deb; do
+        case "$pkg" in
+            *-dbg_*.deb) continue ;;
+        esac
+        KERNEL_INSTALL_DEBS+=("$pkg")
+    done
+fi
+shopt -u nullglob
+
+if [ "${#KERNEL_INSTALL_DEBS[@]}" -gt 0 ]; then
+    sudo mkdir -p "$TARGET_ROOTFS_DIR/boot/kerneldeb"
+    sudo touch "$TARGET_ROOTFS_DIR/boot/build-host"
+    sudo cp -av "${KERNEL_INSTALL_DEBS[@]}" "$TARGET_ROOTFS_DIR/boot/kerneldeb/"
+fi
+
+if [ -d "$KERNEL_DEB_DIR" ]; then
+    shopt -s nullglob
+    KERNEL_BSP_DEBS=("$KERNEL_DEB_DIR"/linux-*.deb)
+    shopt -u nullglob
+    if [ "${#KERNEL_BSP_DEBS[@]}" -gt 0 ]; then
+        sudo mkdir -p "$TARGET_ROOTFS_DIR/home/linaro/bsp-debs"
+        sudo cp -av "${KERNEL_BSP_DEBS[@]}" "$TARGET_ROOTFS_DIR/home/linaro/bsp-debs/"
+    fi
 fi
 
 # overlay folder
@@ -214,6 +262,14 @@ export LC_ALL=C.UTF-8
 mkdir -p /etc
 echo "nameserver 8.8.8.8" > /etc/resolv.conf
 echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+cat > /etc/hosts <<'HOSTS_EOF'
+127.0.0.1 localhost
+127.0.1.1 Rockchip
+
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+HOSTS_EOF
 
 # Make sure the APT directory exists.
 mkdir -p /var/cache/apt/archives/partial
@@ -222,8 +278,12 @@ mkdir -p /var/lib/apt/lists/partial
 apt-get update
 apt-get upgrade -y
 
+# Headless ToB images do not need doc-base; removing it also avoids
+# non-fatal trigger errors from packages that ship broken doc registrations.
+dpkg -l | grep -q "^ii  doc-base " && apt purge -y doc-base || true
+
 chmod o+x /usr/lib/dbus-1.0/dbus-daemon-launch-helper
-chmod +x /etc/rc.local
+[ -e /etc/rc.local ] && chmod +x /etc/rc.local || true
 
 export DEBIAN_FRONTEND=noninteractive
 export APT_INSTALL="apt-get install -fy --allow-downgrades -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
@@ -256,7 +316,7 @@ dpkg -l | grep -q initramfs-tools && apt purge initramfs-tools -y || echo "initr
 if [[ "$TARGET" == "gnome" || "$TARGET" == "gnome-full" ]]; then
     \${APT_INSTALL} gdisk
 elif [[ "$TARGET" == "xfce" || "$TARGET" == "xfce-full" ]]; then
-    \apt-get remove -y gnome-bluetooth
+    apt-get remove -y gnome-bluetooth
     \${APT_INSTALL} bluez bluez-tools
 elif [ "$TARGET" == "lite" ]; then
     \${APT_INSTALL} bluez bluez-tools
@@ -264,6 +324,10 @@ fi
 \${APT_INSTALL} /packages/install_packages/*.deb
 
 \${APT_INSTALL} /boot/kerneldeb/* || true
+\${APT_INSTALL} dkms build-essential kmod pkg-config python3 python-is-python3 python3-dev python3-venv \
+    python3-setuptools python3-wheel libncurses5 libtinfo5 libatomic1
+\${APT_INSTALL} lsb-release
+\${APT_INSTALL} lsb-core || true
 
 echo -e "\033[47;36m ----- power management ----- \033[0m"
 \${APT_INSTALL} pm-utils triggerhappy bsdmainutils
@@ -367,10 +431,11 @@ fi
 
 if [[ "$TARGET" == "gnome" ||  "$TARGET" == "xfce" || "$TARGET" == "gnome-full" || "$TARGET" == "xfce-full" ]]; then
     echo -e "\033[47;36m ------- Install mpv --------- \033[0m"
-    \apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install -y /packages/mpv/*.deb
+    apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install -y /packages/mpv/*.deb
 fi
 
 apt autoremove -y
+ldconfig || true
 
 # mark package to hold
 apt list --upgradable | cut -d/ -f1 | xargs apt-mark hold

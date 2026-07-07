@@ -1,4 +1,5 @@
 binary/
+binary.extract.*/
 *.tar.gz
 *.img
 rootfs/

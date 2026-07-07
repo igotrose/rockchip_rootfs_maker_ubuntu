@@ -69,6 +69,7 @@ install_packages() {
     esac
 
     apt install -fy --allow-downgrades /libmali-*$MALI*-x11*.deb
+    ldconfig || true
 }
 
 function update_npu_fw() {
@@ -77,7 +78,7 @@ function update_npu_fw() {
     /usr/bin/npu_transfer_proxy&
 }
 
-COMPATIBLE=$(cat /proc/device-tree/compatible)
+COMPATIBLE="$(tr -d '\0' < /proc/device-tree/compatible 2>/dev/null || true)"
 if [[ $COMPATIBLE =~ "rk3288" ]];
 then
     CHIPNAME="rk3288"
@@ -129,7 +130,7 @@ then
 
     install_packages ${CHIPNAME}
 
-    setcap CAP_SYS_ADMIN+ep /usr/bin/gst-launch-1.0
+    [ -x /usr/bin/gst-launch-1.0 ] && setcap CAP_SYS_ADMIN+ep /usr/bin/gst-launch-1.0 || true
 
     if [ -e "/dev/rfkill" ] ;
     then
@@ -185,11 +186,13 @@ chmod 660 /dev/video-*
 chown root:video /dev/video-*
 
 # The chromium using fixed pathes for libv4l2.so
-ln -rsf /usr/lib/*/libv4l2.so /usr/lib/
+if compgen -G "/usr/lib/*/libv4l2.so" >/dev/null; then
+    ln -rsf /usr/lib/*/libv4l2.so /usr/lib/
+fi
 [ -e /usr/lib/aarch64-linux-gnu/ ] && ln -Tsf lib /usr/lib64
 
 # sync system time
-hwclock --systohc
+hwclock --systohc || true
 
 # read mac-address from efuse
 # if [ "$BOARDNAME" == "rk3288-miniarm" ]; then
